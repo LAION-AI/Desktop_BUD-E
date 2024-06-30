@@ -55,7 +55,7 @@ ptyprocess==0.7.0
 pure-eval==0.2.2
 PyAudio==0.2.14
 pycparser==2.21
-pydantic==2.6.2
+pydantic<2.0.0,>=1.10.4
 pydantic_core==2.16.3
 pygame==2.5.2
 Pygments==2.17.2
@@ -63,6 +63,8 @@ python-dateutil==2.8.2
 python-dotenv==1.0.1
 PyYAML==6.0.1
 pyzmq==25.1.2
+pvporcupine 
+pvrecorder
 regex==2023.12.25
 requests==2.31.0
 six==1.16.0
@@ -71,7 +73,7 @@ sounddevice==0.4.6
 SQLAlchemy==2.0.27
 stack-data==0.6.3
 tenacity==8.2.3
-tiktoken==0.6.0
+tiktoken==0.3.1
 tornado==6.4
 tqdm==4.66.2
 traitlets==5.14.1
@@ -82,7 +84,7 @@ verboselogs==1.7
 wcwidth==0.2.13
 websocket==0.2.1
 websocket-client==1.7.0
-websockets==12.0
+websockets>=10.4,<11.0
 yarl==1.9.4
 zope.event==5.0
 zope.interface==6.2
