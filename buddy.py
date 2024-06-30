@@ -306,7 +306,7 @@ class ConversationManager:
         print("Conversation ended. Listening for wake words again...")
 
 async def main():
-    access_key = "HsBjNtt2cDsNbbaFIBeEXcCTxkv8XrnDeRiuhtNz4EX5PmeAr1pOkQ=="  # Replace with your Picovoice AccessKey
+    access_key = "xxxx=="  # Replace with your Picovoice AccessKey  https://picovoice.ai/platform/porcupine/
     model_path = "hey-buddy_en_linux_v3_0_0.ppn"
     model2_path = "stop-buddy_en_linux_v3_0_0.ppn"
 
