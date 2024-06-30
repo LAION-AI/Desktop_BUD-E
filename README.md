@@ -1,12 +1,10 @@
-# DEMO
+This is a voice assitant that uses Text-To-Speech, Speech-To-Text, and a language model to have a conversation with a user.
 
-This is a alpha demo showing a bot that uses Text-To-Speech, Speech-To-Text, and a language model to have a conversation with a user.
-
-This demo is set up to use [Deepgram](www.deepgram.com) for the audio service and [Groq](https://groq.com/) the LLM.
+It currently uses [Deepgram](www.deepgram.com) for the audio service and [Groq](https://groq.com/) the LLM. For the wake word detection it uses Porcupine from Pico Voice ().
 
 This demo utilizes streaming for sst and tts to speed things up.
 
-The files in `building_blocks` are the isolated components if you'd like to inspect them
+In the future it should be made working with Open Source APIs, that you can host yourself.
 
 # Installation
 Recommendation: Make a venv and install everything in the venv. Make sure your microphone works.
