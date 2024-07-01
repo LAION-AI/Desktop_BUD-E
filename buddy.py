@@ -11,6 +11,60 @@ import requests  # For making HTTP requests
 import time  # For time-related functions
 import threading
 
+import re
+import subprocess
+import time
+import random
+
+def open_site(url):
+    # Use subprocess.Popen to open the browser
+    process = subprocess.Popen(['xdg-open', url])
+    
+    # Wait for 2 seconds
+    time.sleep(1)
+    
+    # Kill the process
+    process.terminate()  # Safely terminate the process
+    # If terminate doesn't kill the process, you can use kill():
+    # process.kill()
+    
+def extract_urls_to_open(input_string):
+    # Define a regular expression pattern to find URLs within <open-url> tags
+    pattern = r"<open-url>(https?://[^<]+)</open-url>"
+    
+    # Use re.findall to extract all occurrences of the pattern
+    urls = re.findall(pattern, input_string)
+    
+    return urls
+
+
+def extract_questions_to_send_to_askorkg(input_string):
+    # Define a regular expression pattern to find content within <open-askorkg>...</open-orkg> tags
+    pattern = r"<open-askorkg>(.*?)</open-askorkg>"
+    
+    # Use re.findall to extract all occurrences of the pattern
+    contents = re.findall(pattern, input_string)
+    
+    # Return the content of the first tag pair, or None if there are no matches
+    return contents[0] if contents else None
+
+
+def extract_questions_to_send_to_wikipedia(input_string):
+    # Define a regular expression pattern to find content within <open-askorkg>...</open-orkg> tags
+    pattern = r"<open-wikipedia>(.*?)</open-wikipedia>"
+    
+    # Use re.findall to extract all occurrences of the pattern
+    contents = re.findall(pattern, input_string)
+    
+    # Return the content of the first tag pair, or None if there are no matches
+    return contents[0] if contents else None
+    
+# Example usage
+#input_text = "Here are some URLs: <open-url>https://www.google.com/</open-url> and <open-url>https://www.example.com/</open-url>"
+#extracted_urls = extract_urls_to_open(input_text)
+#print("Extracted URLs:", extracted_urls)
+
+
 
 # Import LangChain components
 from langchain_core.prompts import ChatPromptTemplate
@@ -292,8 +346,59 @@ class ConversationManager:
             if "goodbye" in self.transcription_response.lower():
                 self.conversation_active = False
                 break
-            
+
             llm_response = self.llm.process(self.transcription_response)
+
+
+            extracted_url_to_open = extract_urls_to_open(llm_response)
+        
+
+            # Possible responses for opening a URL
+            url_open_responses = [
+                "Sure! Let me know if there's anything else you need.",
+                "All set! Anything else you'd like to explore?",
+                "The site has been opened! Feel free to ask more questions.",
+                "Done! Can I assist you with anything else today?",
+                "The link is now open! Let me know if you need further assistance."
+            ]
+
+            # Selecting a random response from the list
+            if len(extracted_url_to_open) > 0:
+                open_site(extracted_url_to_open[0])
+                llm_response = random.choice(url_open_responses)
+
+
+            question_for_askorkg= extract_questions_to_send_to_askorkg(llm_response)
+            # Possible responses for using Ask ORKG
+            ask_orkg_responses = [
+                "Sure! I will use the Ask Open Knowledge Graph service to analyze the question: {0}",
+                "Got it! Let's see what Ask Open Knowledge Graph has on: {0}",
+                "I'm on it! Checking Ask Open Knowledge Graph for information about: {0}",
+                "Excellent question! I'll consult Ask Open Knowledge Graph about: {0}",
+                "One moment! I'll look that up on Ask Open Knowledge Graph for you about: {0}"
+            ]
+
+            if question_for_askorkg is not None:
+                open_site("https://ask.orkg.org/search?query=" + question_for_askorkg)
+                llm_response = random.choice(ask_orkg_responses).format(question_for_askorkg)
+   
+                      
+            question_for_wikipedia= extract_questions_to_send_to_wikipedia(llm_response)
+            # Possible responses for searching Wikipedia
+            wikipedia_responses = [
+                "Sure! Here are the Wikipedia search results for: {0}",
+                "Let me pull up Wikipedia for you to explore: {0}",
+                "Checking Wikipedia for: {0}. Here's what I found!",
+                "I'll search Wikipedia for that. Hold on: {0}",
+                "One moment, I'm getting the information from Wikipedia on: {0}"
+            ]
+
+            if question_for_wikipedia is not None:
+                open_site("https://en.wikipedia.org/w/index.php?search=" + question_for_wikipedia)
+                llm_response = random.choice(wikipedia_responses).format(question_for_wikipedia)
+
+ 
+                      
             print(f"AI: {llm_response}")
 
             await self.speak_response(llm_response)
@@ -306,7 +411,7 @@ class ConversationManager:
         print("Conversation ended. Listening for wake words again...")
 
 async def main():
-    access_key = os.getenv("PORCUPINE_API_KEY")   # Get your Picovoice Access Key here: https://picovoice.ai/platform/porcupine/
+    access_key = os.getenv("PORCUPINE_API_KEY") #"HsBjNtt2cDsNbbaFIBeEXcCTxkv8XrnDeRiuhtNz4EX5PmeAr1pOkQ=="  # Replace with your Picovoice AccessKey
     model_path = "hey-buddy_en_linux_v3_0_0.ppn"
     model2_path = "stop-buddy_en_linux_v3_0_0.ppn"
 
