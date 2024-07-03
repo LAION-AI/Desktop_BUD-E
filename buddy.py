@@ -18,7 +18,8 @@ import random
 
 def open_site(url):
     # Use subprocess.Popen to open the browser
-    process = subprocess.Popen(['xdg-open', url])
+    process = subprocess.Popen(['open', url])
+    #process = subprocess.Popen(['xdg-open', url])
     
     # Wait for 2 seconds
     time.sleep(1)
@@ -412,8 +413,10 @@ class ConversationManager:
 
 async def main():
     access_key = os.getenv("PORCUPINE_API_KEY") #"HsBjNtt2cDsNbbaFIBeEXcCTxkv8XrnDeRiuhtNz4EX5PmeAr1pOkQ=="  # Replace with your Picovoice AccessKey
-    model_path = "hey-buddy_en_linux_v3_0_0.ppn"
-    model2_path = "stop-buddy_en_linux_v3_0_0.ppn"
+    model_path = "hey-buddy_en_mac_v3_0_0.ppn"
+    model2_path = "stop-buddy_en_mac_v3_0_0.ppn"
+    #model_path = "hey-buddy_en_linux_v3_0_0.ppn"
+    #model2_path = "stop-buddy_en_linux_v3_0_0.ppn"
 
     porcupine = pvporcupine.create(access_key=access_key, keyword_paths=[model_path, model2_path])
 
