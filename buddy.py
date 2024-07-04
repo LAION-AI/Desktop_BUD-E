@@ -12,6 +12,11 @@ import time  # For time-related functions
 import threading
 import clipboard
 
+import io
+import threading
+from PIL import Image
+from PIL import ImageGrab
+
 import re
 import subprocess
 import time
@@ -30,86 +35,35 @@ import time
 
 import threading
 
+# Import LangChain components
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+from langchain.chains import LLMChain
+
+# Import Deepgram components
+from deepgram import (
+    DeepgramClient,
+    DeepgramClientOptions,
+    LiveTranscriptionEvents,
+    LiveOptions,
+    Microphone,
+)
+
+from florence2 import handle_captioning
+from florence2 import handle_ocr
+from florence2 import send_image_for_captioning
+from florence2 import send_image_for_ocr
+
 florence2_server_url = "http://213.173.96.19:5002/" 
-def handle_captioning(img_byte_arr, results):
-    caption = send_image_for_captioning(img_byte_arr)
-    results['caption'] = caption
 
-# Function to handle OCR
-def handle_ocr(img_byte_arr, results):
-    ocr_result = send_image_for_ocr(img_byte_arr)
-    results['ocr'] = ocr_result
-
-def send_image_for_captioning(image_data):
-    # Server URL
-    url = florence2_server_url+"caption"  # Replace with your server's IP address
-
-    try:
-        # Encode image data to base64
-        encoded_image = base64.b64encode(image_data).decode('utf-8')
-        print("Image encoded to base64")
-
-        # Prepare the request payload
-        payload = {"image": encoded_image}
-
-        # Send POST request to the server
-        print("Sending request to server...")
-        response = requests.post(url, json=payload)
-
-        # Check if the request was successful
-        if response.status_code == 200:
-            caption = response.json()["caption"] ['<MORE_DETAILED_CAPTION>']
-            print("Received caption from server:")
-            print(caption)
-            return caption
-        else:
-            print(f"Error: Server returned status code {response.status_code}")
-            print(f"Error message: {response.json().get('error', 'Unknown error')}")
-            return None
-
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        return None
-
-
-def send_image_for_ocr(image_data):
-    # Server URL
-    url = url = florence2_server_url+"ocr" # Replace with your server's IP address
-
-    try:
-        # Encode image data to base64
-        encoded_image = base64.b64encode(image_data).decode('utf-8')
-        print("Image encoded to base64")
-
-        # Prepare the request payload
-        payload = {"image": encoded_image}
-
-        # Send POST request to the server
-        print("Sending request to server...")
-        response = requests.post(url, json=payload)
-
-        # Check if the request was successful
-        if response.status_code == 200:
-            print(response.json())
-            caption = response.json()["ocr"]['<OCR>']
-            print("Received caption from server:")
-            print(caption)
-            return caption
-        else:
-            print(f"Error: Server returned status code {response.status_code}")
-            print(f"Error message: {response.json().get('error', 'Unknown error')}")
-            return None
-
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        return None
-
-
-import clipboard
-import io
-import threading
-from PIL import Image
-from PIL import ImageGrab
 
 def get_caption_from_clipboard():
     # Check clipboard content
@@ -200,10 +154,7 @@ def get_caption_from_screenshot():
     print(results)
     # Combine results and print
     combined_caption = results['caption'] + "\nOCR RESULTS:\n"+ results['ocr']
-    
-    
-    
-    
+        
     return combined_caption
 
 
@@ -251,34 +202,10 @@ def extract_questions_to_send_to_wikipedia(input_string):
     # Return the content of the first tag pair, or None if there are no matches
     return contents[0] if contents else None
     
-# Example usage
-#input_text = "Here are some URLs: <open-url>https://www.google.com/</open-url> and <open-url>https://www.example.com/</open-url>"
-#extracted_urls = extract_urls_to_open(input_text)
-#print("Extracted URLs:", extracted_urls)
 
 
 
-# Import LangChain components
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_groq import ChatGroq
-from langchain_openai import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import (
-    ChatPromptTemplate,
-    MessagesPlaceholder,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-)
-from langchain.chains import LLMChain
 
-# Import Deepgram components
-from deepgram import (
-    DeepgramClient,
-    DeepgramClientOptions,
-    LiveTranscriptionEvents,
-    LiveOptions,
-    Microphone,
-)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -538,6 +465,8 @@ class ConversationManager:
             if "goodbye" in self.transcription_response.lower():
                 self.conversation_active = False
                 break
+                
+                
             what_buddy_sees = ""
             if "have a look" in self.transcription_response.lower() or "buddy look" in self.transcription_response.lower() or "look buddy" in self.transcription_response.lower() or "buddy, look" in self.transcription_response.lower() or "look, buddy" in self.transcription_response.lower() :
                 if "screen" in self.transcription_response.lower():
@@ -549,8 +478,6 @@ class ConversationManager:
 
             llm_response = self.llm.process(self.transcription_response+what_buddy_sees)
 
-
-            
             extracted_url_to_open = extract_urls_to_open(llm_response)
         
 
@@ -612,7 +539,7 @@ class ConversationManager:
         print("Conversation ended. Listening for wake words again...")
 
 async def main():
-    access_key = os.getenv("PORCUPINE_API_KEY") #"HsBjNtt2cDsNbbaFIBeEXcCTxkv8XrnDeRiuhtNz4EX5PmeAr1pOkQ=="  # Replace with your Picovoice AccessKey
+    access_key = os.getenv("PORCUPINE_API_KEY") #  # Replace with your Picovoice AccessKey
     model_path = "hey-buddy_en_linux_v3_0_0.ppn"
     model2_path = "stop-buddy_en_linux_v3_0_0.ppn"
 
