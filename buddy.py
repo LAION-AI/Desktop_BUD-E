@@ -330,94 +330,77 @@ class TextToSpeech:
                 self.player_process.wait()
             self.player_process = None
 
-# Define TranscriptCollector class
-class TranscriptCollector:
+class TranscriptManager:
     def __init__(self):
-        self.reset()
+        self.transcript_parts = []
+        self.transcription_complete = asyncio.Event()
+        self.transcription_response = ""
 
     def reset(self):
-        # Reset transcript parts
         self.transcript_parts = []
+        self.transcription_complete = asyncio.Event()
+        self.transcription_response = ""
 
     def add_part(self, part):
-        # Add a part to the transcript
         self.transcript_parts.append(part)
 
     def get_full_transcript(self):
-        # Get the full transcript
         return ' '.join(self.transcript_parts)
 
-# Create a global transcript collector instance
-transcript_collector = TranscriptCollector()
+    def handle_full_sentence(self, full_sentence):
+        self.transcription_response = full_sentence
 
-# Define get_transcript function
-async def get_transcript(callback):
-    transcription_complete = asyncio.Event()  # Event to signal transcription completion
+    # TODO: Pull out and encapsulate Deepgram stuff
+    async def transcribe(self):
+        response = ""
+        try:
+            config = DeepgramClientOptions(options={"keepalive": "true"})
+            deepgram: DeepgramClient = DeepgramClient("", config)
+            dg_connection = deepgram.listen.asynclive.v("1")
+            print("Listening...")
 
-    try:
-        # Set up Deepgram client
-        config = DeepgramClientOptions(options={"keepalive": "true"})
-        deepgram: DeepgramClient = DeepgramClient("", config)
+            async def on_message(_self, result, **kwargs):
+                sentence = result.channel.alternatives[0].transcript
+                self.add_part(sentence)
+                if result.speech_final:
+                    full_sentence = self.get_full_transcript().strip()
+                    if full_sentence:
+                        print(f"Human: {full_sentence}")
+                        self.handle_full_sentence(full_sentence)
+                        self.transcription_complete.set()
 
-        dg_connection = deepgram.listen.asynclive.v("1")
-        print("Listening...")
+            dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
 
-        async def on_message(self, result, **kwargs):
-            sentence = result.channel.alternatives[0].transcript
-            
-            if not result.speech_final:
-                transcript_collector.add_part(sentence)
-            else:
-                # This is the final part of the current sentence
-                transcript_collector.add_part(sentence)
-                full_sentence = transcript_collector.get_full_transcript()
-                if len(full_sentence.strip()) > 0:
-                    full_sentence = full_sentence.strip()
-                    print(f"Human: {full_sentence}")
-                    callback(full_sentence)  # Call the callback with the full_sentence
-                    transcript_collector.reset()
-                    transcription_complete.set()  # Signal to stop transcription and exit
+            options = LiveOptions(
+                model="nova-2",
+                punctuate=True,
+                language="en-US",
+                encoding="linear16",
+                channels=1,
+                sample_rate=16000,
+                endpointing=300,
+                smart_format=True
+            )
 
-        # Set up Deepgram connection event handler
-        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+            await dg_connection.start(options)
+            microphone = Microphone(dg_connection.send)
+            microphone.start()
+            await self.transcription_complete.wait()
+            microphone.finish()
+            await dg_connection.finish()
+            response = self.transcription_response
+            self.reset()
+        except Exception as e:
+            print(f"Could not open socket: {e}")
+        finally:
+            return response
 
-        # Set up Deepgram live options
-        options = LiveOptions(
-            model="nova-2",
-            punctuate=True,
-            language="en-US",
-            encoding="linear16",
-            channels=1,
-            sample_rate=16000,
-            endpointing=300,
-            smart_format=True
-            
-        )
-
-        # Start Deepgram connection
-        await dg_connection.start(options)
-
-        # Open a microphone stream on the default input device
-        microphone = Microphone(dg_connection.send)
-        microphone.start()
-
-        # Wait for the transcription to complete
-        await transcription_complete.wait()
-
-        # Wait for the microphone to close
-        microphone.finish()
-
-        # Indicate that we've finished
-        await dg_connection.finish()
-
-    except Exception as e:
-        print(f"Could not open socket: {e}")
-        return
+# Create a global transcript manager instance
+transcript_manager = TranscriptManager()
 
 # Define ConversationManager class
 class ConversationManager:
     def __init__(self, porcupine, recorder):
-        self.transcription_response = ""
         self.llm = LanguageModelProcessor()
         self.tts = TextToSpeech()
         self.porcupine = porcupine
@@ -449,10 +432,7 @@ class ConversationManager:
             wake_word_task.cancel()
             self.recorder.stop()  # Stop recorder after TTS
 
-    async def main(self):
-        def handle_full_sentence(full_sentence):
-            self.transcription_response = full_sentence
-
+    async def converse(self):
         self.conversation_active = True
         while self.conversation_active:
             self.stop_event.clear()
@@ -460,27 +440,22 @@ class ConversationManager:
             
             print("Listening for your command...")
             self.recorder.start()
-            await get_transcript(handle_full_sentence)
+            user_transcript = await transcript_manager.transcribe()
             self.recorder.stop()
             
-            if "goodbye" in self.transcription_response.lower():
+            if "goodbye" in user_transcript.lower():
                 self.conversation_active = False
                 break
                 
-                
             what_buddy_sees = ""
-            if "have a look" in self.transcription_response.lower() or "buddy look" in self.transcription_response.lower() or "look buddy" in self.transcription_response.lower() or "buddy, look" in self.transcription_response.lower() or "look, buddy" in self.transcription_response.lower() :
-                if "screen" in self.transcription_response.lower():
-                    what_buddy_sees = "[BUD-E is seeing this: " + get_caption_from_screenshot() + " ] (Continue the conversation as BUD-E considering what it is seeing) "
-                else:
-                    what_buddy_sees = "[BUD-E is seeing this: " + get_caption_from_clipboard() + " ] (Continue the conversation as BUD-E considering what it is seeing) "
+            if any(phrase in transcript_manager.transcription_response.lower() for phrase in ["have a look", "buddy look", "look buddy", "buddy, look", "look, buddy"]):
+                source = get_caption_from_screenshot if "screen" in transcript_manager.transcription_response.lower() else get_caption_from_clipboard
+                what_buddy_sees = f"[BUD-E is seeing this: {source()} ] (Continue the conversation as BUD-E considering what it is seeing) "
 
 
-
-            llm_response = self.llm.process(self.transcription_response+what_buddy_sees)
+            llm_response = self.llm.process(user_transcript+what_buddy_sees)
 
             extracted_url_to_open = extract_urls_to_open(llm_response)
-        
 
             # Possible responses for opening a URL
             url_open_responses = [
@@ -496,7 +471,6 @@ class ConversationManager:
                 open_site(extracted_url_to_open[0])
                 llm_response = random.choice(url_open_responses)
 
-
             question_for_askorkg= extract_questions_to_send_to_askorkg(llm_response)
             # Possible responses for using Ask ORKG
             ask_orkg_responses = [
@@ -511,7 +485,6 @@ class ConversationManager:
                 open_site("https://ask.orkg.org/search?query=" + question_for_askorkg)
                 llm_response = random.choice(ask_orkg_responses).format(question_for_askorkg)
    
-                      
             question_for_wikipedia= extract_questions_to_send_to_wikipedia(llm_response)
             # Possible responses for searching Wikipedia
             wikipedia_responses = [
@@ -526,16 +499,12 @@ class ConversationManager:
                 open_site("https://en.wikipedia.org/w/index.php?search=" + question_for_wikipedia)
                 llm_response = random.choice(wikipedia_responses).format(question_for_wikipedia)
 
- 
-                      
             print(f"AI: {llm_response}")
 
             await self.speak_response(llm_response)
 
             if self.stop_event.is_set():
                 print("TTS was interrupted. Ready for next command.")
-            
-            self.transcription_response = ""
 
         print("Conversation ended. Listening for wake words again...")
 
@@ -562,7 +531,7 @@ async def main():
                 keyword_index = porcupine.process(frames)
                 if keyword_index == 0:  # "Hey Buddy" detected
                     print("Wake word 'Hey Buddy' detected!")
-                    await conversation_manager.main()
+                    await conversation_manager.converse()
                     print("Conversation ended. Listening for wake word 'Hey Buddy' again...")
                     break  # Break the inner loop to create a new recorder
 
